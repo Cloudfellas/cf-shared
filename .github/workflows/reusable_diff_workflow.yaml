@@ -1,0 +1,79 @@
+# .github/workflows/reusable_diff_workflow.yaml
+name: Reusable Diff Workflow
+on:
+  workflow_call:
+    inputs:
+      separator:
+        required: true
+        type: string
+      files:
+        required: true
+        type: string
+    outputs:
+      matrix:
+        description: "Matrix of changed files"
+        value: ${{ jobs.setup.outputs.matrix }}
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.value }}
+    steps:
+      # Check out Repository
+      - name: Check out Repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v34
+        with:
+          separator: "${{ inputs.separator }}"
+          files: "${{ inputs.files }}"
+
+      - name: List all changed files
+        id: matrix
+        run: |
+          printf "${{ steps.changed-files.outputs.all_changed_files }}"|jq -R -s 'split(",")' -c > matrixjson
+          echo "value=`cat matrixjson`" >> $GITHUB_ENV
+
+  build:
+    needs: [setup]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        value: ${{fromJson(needs.setup.outputs.matrix)}}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Generate Json Diff for ${{ matrix.value }}
+        env:
+          VARIABLES: ${{ matrix.value }}
+        run: |
+          # Install JD and set permissions
+          sudo wget -nv -O /usr/local/bin/jd https://github.com/josephburnett/jd/releases/download/v1.6.0/jd-amd64-linux
+          sudo chmod +x /usr/local/bin/jd
+          echo VARIABLES = $VARIABLES
+          # Check if workflow exists or if it is new
+          echo "Running git show"
+          # Trick stderr
+          exit_code=0; git show remotes/origin/main~1:$VARIABLES 2> errors.txt || exit_code=$? && true
+          if [ $exit_code -ne 0 ]; then
+            echo "Creating empty json"
+            touch oldjson
+          else
+            echo "Git show on existing json"
+            git show $GITHUB_SHA~1:$VARIABLES > oldjson
+          fi
+          # Convert changes
+          jd -yaml -set oldjson $VARIABLES | grep '^+' | sed -e 's/^+ //' > newjson
+          # DEBUG outputs:
+          echo "OLDJSON"
+          cat oldjson
+          echo "NEWJSON"
+          cat newjson
