@@ -39,6 +39,13 @@ jobs:
           printf "${{ steps.changed-files.outputs.all_changed_files }}"|jq -R -s 'split(",")' -c > matrixjson
           echo "value=`cat matrixjson`" >> $GITHUB_ENV
 
+      - name: Debug output
+        run: |
+          echo "matrixjson contents:"
+          cat matrixjson
+          echo "matrix output:"
+          echo "${{ steps.matrix.outputs.value }}"
+
   build:
     needs: [setup]
     runs-on: ubuntu-latest
