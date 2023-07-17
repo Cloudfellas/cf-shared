@@ -36,8 +36,8 @@ jobs:
       - name: List all changed files
         id: matrix
         run: |
-          printf "${{ steps.changed-files.outputs.all_changed_files }}"|jq -R -s 'split(",")' -c > matrixjson
-          echo "value=`cat matrixjson`" >> $GITHUB_ENV
+          printf ${{ steps.changed-files.outputs.all_changed_files }}|jq -R -s 'split(",")' -c > matrixjson
+          echo "::set-output name=value::$(cat matrixjson)"        
 
       - name: Debug output
         run: |
@@ -51,7 +51,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        value: ${{fromJson(needs.setup.outputs.matrix)}}
+        value: ${{fromJson(needs.setup.outputs.matrix.value)}}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
