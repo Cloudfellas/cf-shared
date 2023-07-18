@@ -33,14 +33,19 @@ jobs:
       - name: List all changed files
         id: matrix
         run: |
-          printf ${{ steps.changed-files.outputs.all_changed_files }}|jq -R -s 'split(",")' -c > matrixjson
-          echo "value=`cat matrixjson`" >> $GITHUB_OUTPUT
-      
+          $changedFiles = "${{ steps.changed-files.outputs.all_changed_files }}"
+          $json = $changedFiles -split "," | ConvertTo-Json
+          Set-Content -Path "matrixjson" -Value $json
+          echo "value=$(Get-Content -Path matrixjson)" | Out-File -Append -FilePath $env:GITHUB_ENV
+        shell: pwsh
+
       # Log the output
       - name: Log all changed files
         run: |
-          echo "All changed files: "
-          cat matrixjson
+          Write-Host "All changed files: "
+          Get-Content matrixjson
+        shell: pwsh
+
 
       - name: Retrieve GitHub context for debugging later
         env:
