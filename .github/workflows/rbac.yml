@@ -35,6 +35,12 @@ jobs:
         run: |
           printf ${{ steps.changed-files.outputs.all_changed_files }}|jq -R -s 'split(",")' -c > matrixjson
           echo "value=`cat matrixjson`" >> $GITHUB_OUTPUT
+      
+      # Log the output
+      - name: Log all changed files
+        run: |
+          echo "All changed files: "
+          cat matrixjson
 
       - name: Retrieve GitHub context for debugging later
         env:
