@@ -11,7 +11,6 @@ on:
         required: true
         type: string
 
-
 jobs:
   setup:
     runs-on: ubuntu-latest
@@ -28,9 +27,8 @@ jobs:
         id: changed-files
         uses: tj-actions/changed-files@v34
         with:
-          separator: ","
-          files: |
-            Deployments/*/deploy_rbac*.json
+          separator: ${{ inputs.separator }}
+          files: ${{ inputs.files }}
 
       - name: List all changed files
         id: matrix
