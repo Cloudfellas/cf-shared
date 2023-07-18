@@ -34,9 +34,10 @@ jobs:
         id: matrix
         run: |
           $changedFiles = "${{ steps.changed-files.outputs.all_changed_files }}"
-          $json = @($changedFiles -split ",") | ConvertTo-Json
+          $json = @($changedFiles -split ",") | ConvertTo-Json -AsArray
           Set-Content -Path "matrixjson" -Value $json
           echo "value=$(Get-Content -Path matrixjson)" | Out-File -Append -FilePath $env:GITHUB_ENV
+        
         shell: pwsh
 
       # Log the output
