@@ -1,7 +1,5 @@
-name: Deploy RBAC resources
-
-on:
-    workflow_call:
+name: 'Get changed files'
+on: workflow_call
 
 jobs:
   setup:
@@ -19,9 +17,9 @@ jobs:
         id: changed-files
         uses: tj-actions/changed-files@v34
         with:
-          separator: ${{ inputs.separator }}
-          files: ${{ inputs.files }}
-##            Deployments/*/deploy_rbac*.json
+          separator: ","
+          files: |
+            Deployments/*/deploy_rbac*.json
 
       - name: List all changed files
         id: matrix
@@ -33,45 +31,3 @@ jobs:
         env:
           GITHUB_CONTEXT: ${{ toJson(github) }}
         run: echo "$GITHUB_CONTEXT"
-
-  build:
-    needs: [setup]
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        value: ${{fromJson(needs.setup.outputs.matrix)}}
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
-      with:
-        fetch-depth: 0
-
-    - name: Generate Json Diff for ${{ matrix.value }}
-      env:
-        VARIABLES: ${{ matrix.value }}
-      run: |
-        # Install JD and set permissions
-        sudo wget -nv -O /usr/local/bin/jd https://github.com/josephburnett/jd/releases/download/v1.6.0/jd-amd64-linux
-        sudo chmod +x /usr/local/bin/jd
-        echo VARIABLES = $VARIABLES
-        # Check if workflow exists or if it is new
-        echo "Running git show"
-        # Trick stderr
-        exit_code=0; git show remotes/origin/main~1:$VARIABLES 2> errors.txt || exit_code=$? && true
-        if [ $exit_code -ne 0 ]; then
-          echo "Creating empty json"
-          touch oldjson
-        else
-          echo "Git show on existing json"
-          git show $GITHUB_SHA~1:$VARIABLES > oldjson
-        fi
-        # Convert changes
-        jd -yaml -set oldjson $VARIABLES | grep '^+' | sed -e 's/^+ //' > newjson
-        # DEBUG outputs:
-        echo "OLDJSON"
-        cat oldjson
-        echo "NEWJSON"
-        cat newjson
-      
-        
