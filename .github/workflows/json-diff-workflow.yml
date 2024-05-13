@@ -24,15 +24,17 @@ jobs:
           VARIABLES: ${{ inputs.variables }}
         run: |
           echo "Checking for file: $VARIABLES"
-          last_commit_hash=$(git log -2 --pretty=format:"%H" -- "$VARIABLES")
+          # Fetch the second-to-last commit hash where the file was modified
+          last_commit_hash=$(git log -2 --pretty=format:"%H" -- "$VARIABLES" | tail -n 1)
           if [ -z "$last_commit_hash" ]; then
             echo "File not found in any previous commits, creating empty json."
-            touch oldjson
+            echo "{}" > oldjson  # Provide a valid empty JSON for comparison
           else
             echo "Found file in commit $last_commit_hash"
             git show ${last_commit_hash}:$VARIABLES > oldjson
             echo "Content of old JSON:"
             cat oldjson
+          fi
           fi
           jd -yaml -set oldjson $VARIABLES | grep '^+' | sed -e 's/^+ //' > newjson
           echo "OLDJSON"
