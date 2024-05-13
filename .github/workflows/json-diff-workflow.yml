@@ -11,7 +11,7 @@ jobs:
   json-diff:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
+      - name: Checkout Repository SHARED
         uses: actions/checkout@v4
       - name: Process Each File
         run: |
