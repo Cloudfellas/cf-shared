@@ -13,7 +13,6 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-
       - name: Process Each File
         run: |
           file_paths=$(echo '${{ inputs.file_paths }}' | jq -r '.[]')
