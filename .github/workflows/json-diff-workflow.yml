@@ -31,6 +31,8 @@ jobs:
           else
             echo "Found file in commit $last_commit_hash"
             git show ${last_commit_hash}:$VARIABLES > oldjson
+            echo "Content of old JSON:"
+            cat oldjson
           fi
           jd -yaml -set oldjson $VARIABLES | grep '^+' | sed -e 's/^+ //' > newjson
           echo "OLDJSON"
