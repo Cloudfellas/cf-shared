@@ -39,3 +39,29 @@ jobs:
 
             # Additional commands to process oldjson and the current file can be added here
           done
+
+          - name: Setup JD for JSON Diff
+          run: |
+            # Install JD and set permissions
+            sudo wget -nv -O /usr/local/bin/jd https://github.com/josephburnett/jd/releases/download/v1.6.0/jd-amd64-linux
+            sudo chmod +x /usr/local/bin/jd
+        
+      - name: Fetch Old and New JSON
+        run: |
+          # Assume OLDJSON and NEWJSON are already generated and saved as oldjson.json and newjson.json
+          echo "OLDJSON"
+          cat oldjson.json
+          echo "NEWJSON"
+          cat newjson.json
+      
+      - name: Use JD to Detect Changes
+        run: |
+          # Compare OLDJSON and NEWJSON
+          jd --set oldjson.json newjson.json > diff.json
+          echo "Differences Detected:"
+          cat diff.json
+      
+          # Extract only additions (new blocks)
+          additions=$(jd --set oldjson.json newjson.json | grep '^+' | sed -e 's/^+ //')
+          echo "Additions:"
+          echo "$additions"  
