@@ -35,7 +35,6 @@ jobs:
             echo "Content of old JSON:"
             cat oldjson
           fi
-          fi
           jd -yaml -set oldjson $VARIABLES | grep '^+' | sed -e 's/^+ //' > newjson
           echo "OLDJSON"
           cat oldjson
