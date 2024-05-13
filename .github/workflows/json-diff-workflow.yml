@@ -3,6 +3,7 @@ on:
   workflow_call:
     inputs:
       variables:
+        description: "Glob pattern for files to process"
         required: true
         type: string
 
@@ -12,8 +13,6 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Install and Configure JD
         run: |
@@ -24,14 +23,14 @@ jobs:
         env:
           VARIABLES: ${{ inputs.variables }}
         run: |
-          echo VARIABLES = $VARIABLES
-          exit_code=0; git show remotes/origin/main~1:$VARIABLES 2> errors.txt || exit_code=$? && true
-          if [ $exit_code -ne 0 ]; then
-            echo "Creating empty json"
+          echo "Checking for file: $VARIABLES"
+          last_commit_hash=$(git log -1 --pretty=format:"%H" -- "$VARIABLES")
+          if [ -z "$last_commit_hash" ]; then
+            echo "File not found in any previous commits, creating empty json."
             touch oldjson
           else
-            echo "Git show on existing json"
-            git show $GITHUB_SHA~1:$VARIABLES > oldjson
+            echo "Found file in commit $last_commit_hash"
+            git show ${last_commit_hash}:$VARIABLES > oldjson
           fi
           jd -yaml -set oldjson $VARIABLES | grep '^+' | sed -e 's/^+ //' > newjson
           echo "OLDJSON"
