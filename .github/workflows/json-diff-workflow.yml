@@ -2,8 +2,8 @@ name: Reusable JSON Diff Workflow
 on:
   workflow_call:
     inputs:
-      variables:
-        description: "Glob pattern for files to process"
+      file_paths:
+        description: "JSON array of file paths to process"
         required: true
         type: string
 
@@ -14,29 +14,19 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install and Configure JD
+      - name: Process Each File
         run: |
-          sudo wget -nv -O /usr/local/bin/jd https://github.com/josephburnett/jd/releases/download/v1.6.0/jd-amd64-linux
-          sudo chmod +x /usr/local/bin/jd
-
-      - name: Generate JSON Diff
-        env:
-          VARIABLES: ${{ inputs.variables }}
-        run: |
-          echo "Checking for file: $VARIABLES"
-          # Fetch the second-to-last commit hash where the file was modified
-          last_commit_hash=$(git log -2 --pretty=format:"%H" -- "$VARIABLES" | tail -n 1)
-          if [ -z "$last_commit_hash" ]; then
-            echo "File not found in any previous commits, creating empty json."
-            echo "{}" > oldjson  # Provide a valid empty JSON for comparison
-          else
-            echo "Found file in commit $last_commit_hash"
-            git show ${last_commit_hash}:$VARIABLES > oldjson
-            echo "Content of old JSON:"
-            cat oldjson
-          fi
-          jd -yaml -set oldjson $VARIABLES | grep '^+' | sed -e 's/^+ //' > newjson
-          echo "OLDJSON"
-          cat oldjson
-          echo "NEWJSON"
-          cat newjson
+          file_paths=$(echo '${{ inputs.file_paths }}' | jq -r '.[]')
+          for file in $file_paths; do
+            echo "Processing file: $file"
+            last_commit_hash=$(git log -1 --pretty=format:"%H" -- "$file")
+            if [ -z "$last_commit_hash" ]; then
+              echo "File not found in any previous commits, creating empty json."
+              echo "{}" > oldjson
+            else
+              git show ${last_commit_hash}:$file > oldjson
+              echo "Content of old JSON:"
+              cat oldjson
+            fi
+            # Additional commands to process oldjson and the current file
+          done
