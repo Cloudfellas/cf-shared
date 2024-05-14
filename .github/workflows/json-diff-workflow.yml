@@ -69,16 +69,16 @@ jobs:
                 echo "${jd_command_output}"
                 echo "JD Command Exit Code: ${jd_exit_code}"
       
-                if [ ${jd_exit_code} -eq 1 ]; then
-                    echo "No differences detected in $file."
-                elif [ ${jd_exit_code} -eq 0 ]; then
+                if [ ${jd_exit_code} -eq 0 ]; then
                     echo "Differences Detected in $file:"
                     echo "${jd_command_output}"
                     
                     # Extract only additions (new blocks)
-                    additions=$(echo "${jd_command_output}" | grep '^+' | sed -e 's/^+ //' > "${file}_new.json")
+                    echo "${jd_command_output}" | grep '^+' | sed -e 's/^+ //' > "${file}_new.json"
                     echo "Additions in $file:"
                     cat "${file}_new.json"
+                elif [ ${jd_exit_code} -eq 1 ]; then
+                    echo "No differences detected in $file."
                 else
                     echo "JD failed to process files. Review output above for errors."
                 fi
