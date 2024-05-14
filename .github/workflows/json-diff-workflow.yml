@@ -48,26 +48,32 @@ jobs:
           sudo wget -nv -O /usr/local/bin/jd https://github.com/josephburnett/jd/releases/download/v1.6.0/jd-amd64-linux
           sudo chmod +x /usr/local/bin/jd
         
-      - name: Use JD to Detect Changes
-        run: |
-          file_paths=$(echo '${{ inputs.file_paths }}' | jq -r '.[]')
-          echo "Verifying contents of ${file}_old.json:"
-          cat "${file}_old.json"
-          echo "Verifying contents of ${file}_new.json:"
-          cat "${file}_new.json"
-           for file in $file_paths; do
-          # Check if both JSON files exist and are not empty
-          if [ -s "${file}_old.json" ] && [ -s "${file}_new.json" ]; then
-              # Compare OLDJSON and NEWJSON using JD
-              jd --set "${file}_old.json" "${file}_new.json" > "${file}_diff.json"
-              echo "Differences Detected in $file:"
-              cat "${file}_diff.json"
-              
-              # Extract only additions (new blocks)
-              additions=$(jd --set "${file}_old.json" "${file}_new.json" | grep '^+' | sed -e 's/^+ //')
-              echo "Additions in $file:"
-              echo "$additions"
-          else
-              echo "One or both JSON files are empty or missing for $file"
-          fi
+          - name: Use JD to Detect Changes
+          run: |
+            file_paths=$(echo '${{ inputs.file_paths }}' | jq -r '.[]')
+            for file in $file_paths; do
+              # Construct filenames for old and new JSON files
+              old_json="${file}_old.json"
+              new_json="${file}_new.json"
+        
+              # Display file contents for debugging
+              echo "Verifying contents of ${old_json}:"
+              cat "${old_json}"
+              echo "Verifying contents of ${new_json}:"
+              cat "${new_json}"
+        
+              # Check if both JSON files exist and are not empty
+              if [ -s "${old_json}" ] && [ -s "${new_json}" ]; then
+                  # Compare OLDJSON and NEWJSON using JD
+                  jd --set "${old_json}" "${new_json}" > "${file}_diff.json"
+                  echo "Differences Detected in $file:"
+                  cat "${file}_diff.json"
+                  
+                  # Extract only additions (new blocks)
+                  additions=$(jd --set "${old_json}" "${new_json}" | grep '^+' | sed -e 's/^+ //')
+                  echo "Additions in $file:"
+                  echo "$additions"
+              else
+                  echo "One or both JSON files are empty or missing for ${file}"
+              fi
             done
