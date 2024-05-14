@@ -62,25 +62,25 @@ jobs:
           for file in $file_paths; do
             old_json="${file}_old.json"
             new_json="${file}_new.json"
-    
+      
             echo "Verifying contents of ${old_json}:"
             cat "${old_json}"
             echo "Verifying contents of ${new_json}:"
             cat "${new_json}"
-    
+      
             # Check if both JSON files exist and are not empty
             if [ -s "${old_json}" ] && [ -s "${new_json}" ]; then
                 # Compare OLDJSON and NEWJSON using JD
-                jd_command_output=$(jd --set "${old_json}" "${new_json}" 2>&1)
+                jd_command_output=$(jd "${old_json}" "${new_json}" 2>&1)
                 jd_exit_code=$?
                 
                 echo "JD Command Output:"
                 echo "${jd_command_output}"
                 echo "JD Command Exit Code: ${jd_exit_code}"
-    
-                if [ ${jd_exit_code} -eq 1 ]; then
+      
+                if [ ${jd_exit_code} -eq 0 ]; then
                     echo "No differences detected in $file."
-                elif [ ${jd_exit_code} -eq 0 ]; then
+                elif [ ${jd_exit_code} -eq 1 ]; then
                     echo "Differences Detected in $file:"
                     echo "${jd_command_output}"
                     
