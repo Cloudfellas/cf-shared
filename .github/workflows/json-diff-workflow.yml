@@ -15,11 +15,11 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history
 
-      - name: Install JD for JSON Diff
+      - name: Install jq for JSON Diff
         run: |
-          sudo wget -nv -O /usr/local/bin/jd https://github.com/josephburnett/jd/releases/download/v1.6.0/jd-amd64-linux
-          sudo chmod +x /usr/local/bin/jd
-          echo "JD installed successfully."
+          sudo apt-get update
+          sudo apt-get install -y jq
+          echo "jq installed successfully."
 
       - name: Process Files
         run: |
@@ -47,7 +47,7 @@ jobs:
             cat "${file}_new.json"
           done
 
-      - name: Use JD to Detect Changes
+      - name: Detect Changes with jq
         run: |
           file_paths=$(echo '${{ inputs.file_paths }}' | jq -r '.[]')
           for file in $file_paths; do
@@ -61,26 +61,17 @@ jobs:
       
             # Check if both JSON files exist and are not empty
             if [ -s "${old_json}" ] && [ -s "${new_json}" ]; then
-                # Compare OLDJSON and NEWJSON using JD
-                jd_command_output=$(jd --set "${old_json}" "${new_json}" 2>&1)
-                jd_exit_code=$?
+                # Compare OLDJSON and NEWJSON using jq to find additions
+                jq_command_output=$(jq --argfile old "$old_json" --argfile new "$new_json" -n '($old - $new) + ($new - $old)' > "${file}_diff.json")
+                jq_exit_code=$?
                 
-                echo "JD Command Output:"
-                echo "${jd_command_output}"
-                echo "JD Command Exit Code: ${jd_exit_code}"
+                echo "jq Command Exit Code: ${jq_exit_code}"
       
-                if [ ${jd_exit_code} -eq 0 ]; then
+                if [ ${jq_exit_code} -eq 0 ]; then
                     echo "Differences Detected in $file:"
-                    echo "${jd_command_output}"
-                    
-                    # Extract only additions (new blocks)
-                    echo "${jd_command_output}" | grep '^+' | sed -e 's/^+ //' > "${file}_new.json"
-                    echo "Additions in $file:"
-                    cat "${file}_new.json"
-                elif [ ${jd_exit_code} -eq 1 ]; then
-                    echo "No differences detected in $file."
+                    cat "${file}_diff.json"
                 else
-                    echo "JD failed to process files. Review output above for errors."
+                    echo "jq failed to process files. Review output above for errors."
                 fi
             else
                 echo "One or both JSON files are empty or missing for ${file}"
