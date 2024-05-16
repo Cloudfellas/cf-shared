@@ -70,6 +70,11 @@ jobs:
                   [$new[] | select(. as $item | $old | index($item) | . == false)] as $changed |
                   $added + $changed
                 ')
+                
+                # Ensure directory exists
+                output_dir=$(dirname "newjson_${file}")
+                mkdir -p "$output_dir"
+                
                 echo "${diff_json}" > "newjson_${file}"
                 
                 echo "Differences Detected in $file:"
