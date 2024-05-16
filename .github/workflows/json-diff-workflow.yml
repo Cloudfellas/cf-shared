@@ -93,5 +93,4 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: newjson-files
-          path: newjson_*.json
-          if-no-files-found: warn
+          path: newjson_Deployments/**/*.json
