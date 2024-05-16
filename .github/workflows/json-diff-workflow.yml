@@ -1,3 +1,4 @@
+# .github/workflows/json-diff-workflow.yml
 name: Process File Changes
 on:
   workflow_call:
@@ -69,11 +70,17 @@ jobs:
                   [$new[] | select(. as $item | $old | index($item) | . == false)] as $changed |
                   $added + $changed
                 ')
-                echo "${diff_json}" > "${file}_diff.json"
+                echo "${diff_json}" > "newjson_${file}"
                 
                 echo "Differences Detected in $file:"
-                cat "${file}_diff.json"
+                cat "newjson_${file}"
             else
                 echo "One or both JSON files are empty or missing for ${file}"
             fi
           done
+
+      - name: Upload newjson files
+        uses: actions/upload-artifact@v3
+        with:
+          name: newjson-files
+          path: newjson_*.json
