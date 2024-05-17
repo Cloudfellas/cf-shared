@@ -84,11 +84,6 @@ jobs:
             fi
           done
 
-      - name: List files in workspace
-        run: |
-          echo "Listing all files in the workspace:"
-          ls -R
-
       - name: Upload newjson files
         uses: actions/upload-artifact@v3
         with:
