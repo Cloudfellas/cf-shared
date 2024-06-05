@@ -85,7 +85,7 @@ jobs:
           done
 
       - name: Upload newjson files
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: newjson-files
           path: newjson_Deployments/**/*.json
