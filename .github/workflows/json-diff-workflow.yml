@@ -23,26 +23,35 @@ jobs:
 
       - name: Process Files
         run: |
+          echo "Input file paths: ${{ inputs.file_paths }}"
           file_paths=$(echo '${{ inputs.file_paths }}' | jq -r '.[]')
           for file in $file_paths; do
             echo "Processing file: $file"
             
-            # Fetch the last commit hash where the file was changed, excluding the very last commit
-            last_commit_hash=$(git log -2 --pretty=format:"%H" -- "$file" | tail -n 1)
-            echo "Last commit hash for $file: $last_commit_hash"
+            # Check if the file is newly added
+            is_added=$(git diff-tree --no-commit-id --name-only --diff-filter=A -r HEAD -- "$file" | wc -l)
             
-            # Handle case where no previous version is found
-            if [ -z "$last_commit_hash" ]; then
-              echo "File not found in any previous commits, creating empty json."
+            if [ "$is_added" -eq 1 ]; then
+              echo "File $file is newly added."
               echo "{}" > "${file}_old.json"
+              git show HEAD:"$file" > "${file}_new.json"
             else
-              git show ${last_commit_hash}:$file > "${file}_old.json"
+              # Fetch the last commit hash where the file was changed, excluding the very last commit
+              last_commit_hash=$(git log -2 --pretty=format:"%H" -- "$file" | tail -n 1)
+              echo "Last commit hash for $file: $last_commit_hash"
+              
+              # Handle case where no previous version is found
+              if [ -z "$last_commit_hash" ]; then
+                echo "File not found in any previous commits, creating empty json."
+                echo "{}" > "${file}_old.json"
+              else
+                git show ${last_commit_hash}:$file > "${file}_old.json"
+              fi
+              git show HEAD:"$file" > "${file}_new.json"
             fi
+            
             echo "Content of old JSON:"
             cat "${file}_old.json"
-            
-            # Fetch the current version of the file
-            git show HEAD:$file > "${file}_new.json"
             echo "Content of new JSON:"
             cat "${file}_new.json"
           done
