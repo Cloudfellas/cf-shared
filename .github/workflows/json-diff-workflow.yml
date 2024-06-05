@@ -72,11 +72,13 @@ jobs:
             if [ -s "${old_json}" ] && [ -s "${new_json}" ]; then
                 # Find additions or changes
                 diff_json=$(jq --argfile old "${old_json}" --argfile new "${new_json}" -n '
-                  $new as $new | 
-                  $old as $old |
-                  [$new[] | select(. as $item | $old | index($item) | not)] as $added |
-                  [$new[] | select(. as $item | $old | index($item) | . == false)] as $changed |
-                  $added + $changed
+                  if ($old | type) == "array" and ($new | type) == "array" then
+                    [$new[] | select(. as $item | $old | index($item) | not)] as $added |
+                    [$new[] | select(. as $item | $old | index($item) | . == false)] as $changed |
+                    $added + $changed
+                  else
+                    $new
+                  end
                 ')
                 
                 # Ensure directory exists
