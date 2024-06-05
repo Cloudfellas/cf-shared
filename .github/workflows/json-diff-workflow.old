@@ -1,3 +1,4 @@
+# .github/workflows/json-diff-workflow.yml
 name: Process File Changes
 on:
   workflow_call:
@@ -71,14 +72,13 @@ jobs:
                 ')
                 
                 # Ensure directory exists
-                output_file="newjson_${file}"
-                output_dir=$(dirname "${output_file}")
-                mkdir -p "${output_dir}"
+                output_dir=$(dirname "newjson_${file}")
+                mkdir -p "$output_dir"
                 
-                echo "${diff_json}" > "${output_file}"
+                echo "${diff_json}" > "newjson_${file}"
                 
                 echo "Differences Detected in $file:"
-                cat "${output_file}"
+                cat "newjson_${file}"
             else
                 echo "One or both JSON files are empty or missing for ${file}"
             fi
