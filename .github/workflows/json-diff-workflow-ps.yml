@@ -9,7 +9,7 @@ on:
 
 jobs:
   process-changes:
-    runs-on: windows-latest  # Changed to Windows for PowerShell support
+    runs-on: windows-latest  # Required for PowerShell compatibility
 
     steps:
       # Checkout the repository
@@ -18,50 +18,62 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history
 
-      # Prepare the old and new JSON files
+      # Prepare JSON Files
       - name: Prepare JSON Files
         shell: bash
         run: |
           echo "Input file paths: ${{ inputs.file_paths }}"
           file_paths=$(echo '${{ inputs.file_paths }}' | jq -r '.[]')
           for file in $file_paths; do
-            sanitized_file=$(echo "$file" | sed 's/[^[:print:]]//g' | tr -d '\r')
-            echo "Processing sanitized file path: $sanitized_file"
+            echo "Processing file: $file"
 
-            is_added=$(git diff-tree --no-commit-id --name-only --diff-filter=A -r HEAD -- "$sanitized_file" | wc -l)
+            # Check if the file is newly added
+            is_added=$(git diff-tree --no-commit-id --name-only --diff-filter=A -r HEAD -- "$file" | wc -l)
 
             if [ "$is_added" -eq 1 ]; then
-                echo "File $sanitized_file is newly added."
-                echo "{}" > "${sanitized_file}_old.json"
-                git show HEAD:"$sanitized_file" > "${sanitized_file}_new.json"
+              echo "File $file is newly added."
+              echo "{}" > "${file}_old.json"
+              git show HEAD:"$file" > "${file}_new.json"
             else
-                last_commit_hash=$(git log -2 --pretty=format:"%H" -- "$sanitized_file" | tail -n 1)
-                echo "Last commit hash for $sanitized_file: $last_commit_hash"
+              # Fetch the last commit hash where the file was changed
+              last_commit_hash=$(git log -2 --pretty=format:"%H" -- "$file" | tail -n 1)
+              echo "Last commit hash for $file: $last_commit_hash"
 
-                if [ -z "$last_commit_hash" ]; then
-                    echo "File not found in any previous commits, creating empty json."
-                    echo "{}" > "${sanitized_file}_old.json"
-                else
-                    git show ${last_commit_hash}:"$sanitized_file" > "${sanitized_file}_old.json"
-                fi
-                git show HEAD:"$sanitized_file" > "${sanitized_file}_new.json"
+              # Handle case where no previous version is found
+              if [ -z "$last_commit_hash" ]; then
+                echo "File not found in any previous commits, creating empty json."
+                echo "{}" > "${file}_old.json"
+              else
+                git show ${last_commit_hash}:"$file" > "${file}_old.json"
+              fi
+              git show HEAD:"$file" > "${file}_new.json"
             fi
 
             echo "Content of old JSON:"
-            cat "${sanitized_file}_old.json"
+            cat "${file}_old.json"
             echo "Content of new JSON:"
-            cat "${sanitized_file}_new.json"
+            cat "${file}_new.json"
           done
 
-      # Process the JSON diff with PowerShell
+      # Run PowerShell to Process JSON Diff
       - name: Process JSON Diff with PowerShell
         shell: pwsh
         run: |
-          $filePaths = @(${file_paths})
+          $filePaths = Get-ChildItem -Path "." -Filter "*_old.json" | ForEach-Object { $_.FullName -replace "_old.json", "" }
+
           foreach ($file in $filePaths) {
               $oldFile = "${file}_old.json"
               $newFile = "${file}_new.json"
-              $outputFile = "newjson_${file}"
+              $outputFile = "${file}_diff.json"
+
+              if (!(Test-Path $oldFile)) {
+                  Write-Error "Missing old JSON file: $oldFile"
+                  exit 1
+              }
+              if (!(Test-Path $newFile)) {
+                  Write-Error "Missing new JSON file: $newFile"
+                  exit 1
+              }
 
               # Load JSON files
               $json1 = Get-Content -Path $oldFile -Raw | ConvertFrom-Json
@@ -70,7 +82,7 @@ jobs:
               # Initialize an array to store the differences
               $diffResults = @()
 
-              # Compare objects
+              # Compare objects (use your PowerShell diff logic here)
               for ($i = 0; $i -lt $json1.Count; $i++) {
                   $item1 = $json1[$i]
                   $item2 = $json2[$i]
@@ -114,23 +126,20 @@ jobs:
 
                   # Decide what to include in the output
                   if ($changeCount -gt 1) {
-                      # If more than one field changed, include the entire block from File 2
                       $diffResults += $item2
                   } elseif ($changeCount -eq 1) {
-                      # If only one field changed, include just the differences
                       $diffResults += $diffEntry
                   }
               }
 
               # Convert to JSON and save to file
               $diffResults | ConvertTo-Json -Depth 10 | Set-Content -Path $outputFile
-
-              Write-Host "Differences saved to $outputFile"
+              Write-Host "Diff saved to $outputFile"
           }
 
-      # Upload the diff as an artifact
-      - name: Upload JSON Diff
+      # Upload JSON Diff Files
+      - name: Upload JSON Diff Files
         uses: actions/upload-artifact@v4
         with:
           name: json-diff-files
-          path: newjson_Deployments/**/*.json
+          path: *_diff.json
