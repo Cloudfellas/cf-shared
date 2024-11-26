@@ -76,13 +76,14 @@ jobs:
                       .[$key] = (
                         if $newObj[$key] == $oldObj[$key] then
                           $oldObj[$key]
-                        elif ($newObj[$key] | type) == "object" or ($newObj[$key] | type) == "array" then
+                        elif ($newObj[$key] | type) == "array" and ($oldObj[$key] | type) == "array" then
+                          ($newObj[$key] - $oldObj[$key])
+                        elif ($newObj[$key] | type) == "object" and ($oldObj[$key] | type) == "object" then
                           reduce ($newObj[$key] | keys)[] as $subKey (
                             {};
                             .[$subKey] = (
-                              if ($newObj[$key][$subKey] | type) == ($oldObj[$key][$subKey] | type) and
-                                 ($newObj[$key][$subKey] - $oldObj[$key][$subKey]) != null then
-                                $newObj[$key][$subKey]
+                              if $newObj[$key][$subKey] == $oldObj[$key][$subKey] then
+                                $oldObj[$key][$subKey]
                               else
                                 $newObj[$key][$subKey]
                               end
@@ -110,6 +111,7 @@ jobs:
                   echo "One or both JSON files are empty or missing for ${file}"
               fi
           done
+
 
 
       - name: Upload newjson files
