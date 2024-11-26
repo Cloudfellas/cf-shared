@@ -82,7 +82,7 @@ jobs:
               # Initialize an array to store the differences
               $diffResults = @()
 
-              # Compare objects (use your PowerShell diff logic here)
+              # Compare objects
               for ($i = 0; $i -lt $json1.Count; $i++) {
                   $item1 = $json1[$i]
                   $item2 = $json2[$i]
@@ -132,14 +132,21 @@ jobs:
                   }
               }
 
-              # Convert to JSON and save to file
-              $diffResults | ConvertTo-Json -Depth 10 | Set-Content -Path $outputFile
-              Write-Host "Diff saved to $outputFile"
+              # Debug: Check differences
+              if ($diffResults.Count -eq 0) {
+                  Write-Host "No differences detected for $oldFile and $newFile."
+              } else {
+                  $diffResults | ConvertTo-Json -Depth 10 | Set-Content -Path $outputFile
+                  Write-Host "Diff saved to $outputFile"
+              }
           }
 
-      # Upload JSON Diff Files
+      - name: List Generated Files
+        run: dir . /s
+        shell: pwsh
+
       - name: Upload JSON Diff Files
         uses: actions/upload-artifact@v4
         with:
           name: json-diff-files
-          path: '**/*_diff.json'  # Correct glob pattern for recursive matching
+          path: '**/*_diff.json'
