@@ -58,7 +58,7 @@ jobs:
 
       - name: Detect Changes with jq
         run: |
-          file_paths=$(echo '${{ inputs.file_paths }}' | jq -r '.[]')
+         file_paths=$(echo '${{ inputs.file_paths }}' | jq -r '.[]')
           for file in $file_paths; do
               old_json="${file}_old.json"
               new_json="${file}_new.json"
@@ -72,15 +72,17 @@ jobs:
                     [
                       range(0; ($new | length)) as $i |
                       if ($i < ($old | length)) then
-                        ($new[$i] | keys) as $keys |
-                        reduce $keys[] as $key (
+                        # Count changed properties in the block
+                        reduce ($new[$i] | keys)[] as $key (
                           0;
                           . + (if ($new[$i][$key] != $old[$i][$key]) then 1 else 0 end)
                         ) as $changedProperties |
+                        # Include entire block if multiple properties change
                         if $changedProperties > 1 then
                           $new[$i]
                         else
-                          reduce $keys[] as $key (
+                          # Granular diff if only one property changes
+                          reduce ($new[$i] | keys)[] as $key (
                             {};
                             .[$key] = (
                               if ($new[$i][$key] == $old[$i][$key]) then
