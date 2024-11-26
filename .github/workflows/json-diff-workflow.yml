@@ -68,39 +68,45 @@ jobs:
               if [ -s "${old_json}" ] && [ -s "${new_json}" ]; then
                   diff_json=$(jq --argfile old "${old_json}" --argfile new "${new_json}" -n '
                     [
-                      range(0; ($new | length)) as $i |
+                      range(0; ($new | length)) |
                       if . < ($old | length) then
-                        # Check how many properties differ between old and new
-                        reduce ($new[.] | keys)[] as $key (
+                        # Count changes in the block
+                        reduce ($new[.] | keys_unsorted)[] (
                           0;
-                          if $new[.][$key] != $old[.][$key] then . + 1 else . end
-                        ) as $changedProperties |
+                          if $new[.][.] != $old[.][.] then . + 1 else . end
+                        ) as $changeCount |
 
-                        if $changedProperties > 1 then
+                        # Include the full block if multiple changes
+                        if $changeCount > 1 then
                           $new[.]
                         else
-                          # Granular diff: include only changed fields
-                          reduce ($new[.] | keys)[] as $key (
+                          # Create a granular diff for single-property changes
+                          reduce ($new[.] | keys_unsorted)[] (
                             {};
-                            .[$key] = if $new[.][$key] == $old[.][$key] then
-                                        $old[.][$key]
-                                      elif ($new[.][$key] | type) == "array" and ($old[.][$key] | type) == "array" then
-                                        ($new[.][$key] - $old[.][$key])
-                                      elif ($new[.][$key] | type) == "object" and ($old[.][$key] | type) == "object" then
-                                        reduce ($new[.][$key] | keys)[] as $subKey (
-                                          {};
-                                          .[$subKey] = if $new[.][$key][$subKey] == $old[.][$key][$subKey] then
-                                                         $old[.][$key][$subKey]
-                                                       else
-                                                         $new[.][$key][$subKey]
-                                                       end
-                                        )
-                                      else
-                                        $new[.][$key]
-                                      end
+                            .[$key] = (
+                              if $new[.][$key] == $old[.][$key] then
+                                $old[.][$key]
+                              elif ($new[.][$key] | type) == "array" and ($old[.][$key] | type) == "array" then
+                                ($new[.][$key] - $old[.][$key])
+                              elif ($new[.][$key] | type) == "object" and ($old[.][$key] | type) == "object" then
+                                reduce ($new[.][$key] | keys_unsorted)[] (
+                                  {};
+                                  .[$subKey] = (
+                                    if $new[.][$key][$subKey] == $old[.][$key][$subKey] then
+                                      $old[.][$key][$subKey]
+                                    else
+                                      $new[.][$key][$subKey]
+                                    end
+                                  )
+                                )
+                              else
+                                $new[.][$key]
+                              end
+                            )
                           )
                         end
                       else
+                        # Include the new block if it doesn’t exist in the old JSON
                         $new[.]
                       end
                     ]
@@ -109,9 +115,10 @@ jobs:
                   output_file="newjson_${file}"
                   output_dir=$(dirname "${output_file}")
                   mkdir -p "${output_dir}"
+
                   echo "${diff_json}" > "${output_file}"
                   echo "Differences detected for $file:"
-                  cat "${diff_json}"
+                  cat "${output_file}"
                   echo "output_file=${output_file}" >> $GITHUB_OUTPUT
               else
                   echo "One or both JSON files are missing or empty."
