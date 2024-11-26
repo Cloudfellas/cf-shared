@@ -71,13 +71,13 @@ jobs:
                   diff_json=$(jq --argfile old "${old_json}" --argfile new "${new_json}" -n '
                     $new as $newObj |
                     $old as $oldObj |
-                    reduce keys_unsorted($newObj)[] as $key (
+                    reduce ($newObj | keys)[] as $key (
                       {};
                       .[$key] = (
                         if $newObj[$key] == $oldObj[$key] then
                           $oldObj[$key]
-                        elif (type == "object" or type == "array") and $oldObj[$key] != null then
-                          reduce keys_unsorted($newObj[$key])[] as $subKey (
+                        elif ($newObj[$key] | type) == "object" or ($newObj[$key] | type) == "array" then
+                          reduce ($newObj[$key] | keys)[] as $subKey (
                             {};
                             .[$subKey] = ($newObj[$key][$subKey] - $oldObj[$key][$subKey])
                           )
@@ -103,7 +103,6 @@ jobs:
                   echo "One or both JSON files are empty or missing for ${file}"
               fi
           done
-
 
       - name: Upload newjson files
         uses: actions/upload-artifact@v4
