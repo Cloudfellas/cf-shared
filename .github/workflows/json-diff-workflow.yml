@@ -79,10 +79,17 @@ jobs:
                         elif ($newObj[$key] | type) == "object" or ($newObj[$key] | type) == "array" then
                           reduce ($newObj[$key] | keys)[] as $subKey (
                             {};
-                            .[$subKey] = ($newObj[$key][$subKey] - $oldObj[$key][$subKey])
+                            .[$subKey] = (
+                              if ($newObj[$key][$subKey] | type) == ($oldObj[$key][$subKey] | type) and
+                                 ($newObj[$key][$subKey] - $oldObj[$key][$subKey]) != null then
+                                $newObj[$key][$subKey]
+                              else
+                                $newObj[$key][$subKey]
+                              end
+                            )
                           )
                         else
-                          $newObj[$key] - $oldObj[$key]
+                          $newObj[$key]
                         end
                       )
                     )
@@ -103,6 +110,7 @@ jobs:
                   echo "One or both JSON files are empty or missing for ${file}"
               fi
           done
+
 
       - name: Upload newjson files
         uses: actions/upload-artifact@v4
