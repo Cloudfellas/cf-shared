@@ -82,13 +82,17 @@ jobs:
                           reduce ($newObj[$key] | keys)[] as $subKey (
                             {};
                             .[$subKey] = (
-                              if $newObj[$key][$subKey] == $oldObj[$key][$subKey] then
+                              if ($oldObj[$key][$subKey] // null) != null and
+                                 ($newObj[$key][$subKey] == $oldObj[$key][$subKey]) then
                                 $oldObj[$key][$subKey]
                               else
                                 $newObj[$key][$subKey]
                               end
                             )
                           )
+                        elif ($oldObj[$key] | type) != ($newObj[$key] | type) then
+                          # If types mismatch, replace old value with the new one
+                          $newObj[$key]
                         else
                           $newObj[$key]
                         end
