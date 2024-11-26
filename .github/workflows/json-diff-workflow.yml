@@ -70,52 +70,43 @@ jobs:
                   # Generate a granular diff for JSON files with a top-level array
                   diff_json=$(jq --argfile old "${old_json}" --argfile new "${new_json}" -n '
                     [
-                      reduce range(0; ($new | length)) as $i (
-                        [];
-                        . + [
-                          if ($i < ($old | length)) then
-                            # Compare each property in the block
-                            $new[$i] as $newBlock |
-                            $old[$i] as $oldBlock |
-                            ($newBlock | keys) as $keys |
-                            reduce $keys[] as $key (
-                              0;
-                              . + (if $newBlock[$key] != $oldBlock[$key] then 1 else 0 end)
-                            ) as $changedProperties |
-
-                            # Decide whether to include the full block or granular changes
-                            if $changedProperties > 1 then
-                              $newBlock  # Include the full block if multiple properties changed
-                            else
-                              reduce $keys[] as $key (
-                                {};
-                                .[$key] = (
-                                  if $newBlock[$key] == $oldBlock[$key] then
-                                    $oldBlock[$key]
-                                  elif ($newBlock[$key] | type) == "array" and ($oldBlock[$key] | type) == "array" then
-                                    ($newBlock[$key] - $oldBlock[$key])
-                                  elif ($newBlock[$key] | type) == "object" and ($oldBlock[$key] | type) == "object" then
-                                    reduce ($newBlock[$key] | keys)[] as $subKey (
-                                      {};
-                                      .[$subKey] = (
-                                        if $newBlock[$key][$subKey] == $oldBlock[$key][$subKey] then
-                                          $oldBlock[$key][$subKey]
-                                        else
-                                          $newBlock[$key][$subKey]
-                                        end
-                                      )
-                                    )
-                                  else
-                                    $newBlock[$key]
-                                  end
+                      range(0; ($new | length)) as $i |
+                      if ($i < ($old | length)) then
+                        ($new[$i] | keys) as $keys |
+                        reduce $keys[] as $key (
+                          0;
+                          . + (if ($new[$i][$key] != $old[$i][$key]) then 1 else 0 end)
+                        ) as $changedProperties |
+                        if $changedProperties > 1 then
+                          $new[$i]
+                        else
+                          reduce $keys[] as $key (
+                            {};
+                            .[$key] = (
+                              if ($new[$i][$key] == $old[$i][$key]) then
+                                $old[$i][$key]
+                              elif (($new[$i][$key] | type) == "array" and ($old[$i][$key] | type) == "array") then
+                                ($new[$i][$key] - $old[$i][$key])
+                              elif (($new[$i][$key] | type) == "object" and ($old[$i][$key] | type) == "object") then
+                                reduce ($new[$i][$key] | keys)[] as $subKey (
+                                  {};
+                                  .[$subKey] = (
+                                    if ($new[$i][$key][$subKey] == $old[$i][$key][$subKey]) then
+                                      $old[$i][$key][$subKey]
+                                    else
+                                      $new[$i][$key][$subKey]
+                                    end
+                                  )
                                 )
-                              )
-                            end
-                          else
-                            $new[$i]  # Include new block if it doesn’t exist in old JSON
-                          end
-                        ]
-                      )
+                              else
+                                $new[$i][$key]
+                              end
+                            )
+                          )
+                        end
+                      else
+                        $new[$i]
+                      end
                     ]
                   ')
 
@@ -128,7 +119,7 @@ jobs:
                   echo "${diff_json}" > "${output_file}"
 
                   echo "Differences detected for $file:"
-                  cat "${output_file}"
+                  cat "${diff_json}"
                   echo "output_file=${output_file}" >> $GITHUB_OUTPUT
               else
                   echo "One or both JSON files are empty or missing for ${file}"
