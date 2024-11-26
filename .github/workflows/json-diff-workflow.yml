@@ -70,46 +70,45 @@ jobs:
                   # Generate a granular diff for JSON files with a top-level array
                   diff_json=$(jq --argfile old "${old_json}" --argfile new "${new_json}" -n '
                     [
-                      range(0; ($new | length)) as $i |
-                      if ($i < ($old | length)) then
-                        # Count the number of changed properties in the block
-                        reduce ($new[$i] | keys_unsorted)[] as $key (
+                      range(0; ($new | length)) |
+                      if . < ($old | length) then
+                        # Count changed properties in the block
+                        reduce ($new[.] | keys_unsorted)[] (
                           0;
-                          if ($new[$i][$key] != $old[$i][$key]) then . + 1 else . end
+                          if ($new[.][$key] != $old[.][$key]) then . + 1 else . end
                         ) as $changedProperties |
-
-                        # If more than one property changes, include the full block
+                        # Include the entire block if multiple properties change
                         if $changedProperties > 1 then
-                          $new[$i]
+                          $new[.]
                         else
-                          # For a single-property change, compute granular diffs
-                          reduce ($new[$i] | keys_unsorted)[] as $key (
+                          # Granular diff for a single property change
+                          reduce ($new[.] | keys_unsorted)[] (
                             {};
                             .[$key] = (
-                              if ($new[$i][$key] == $old[$i][$key]) then
-                                $old[$i][$key]
-                              elif (($new[$i][$key] | type) == "array" and ($old[$i][$key] | type) == "array") then
-                                ($new[$i][$key] - $old[$i][$key])
-                              elif (($new[$i][$key] | type) == "object" and ($old[$i][$key] | type) == "object") then
-                                reduce ($new[$i][$key] | keys_unsorted)[] as $subKey (
+                              if ($new[.][$key] == $old[.][$key]) then
+                                $old[.][$key]
+                              elif (($new[.][$key] | type) == "array" and ($old[.][$key] | type) == "array") then
+                                ($new[.][$key] - $old[.][$key])
+                              elif (($new[.][$key] | type) == "object" and ($old[.][$key] | type) == "object") then
+                                reduce ($new[.][$key] | keys_unsorted)[] (
                                   {};
                                   .[$subKey] = (
-                                    if ($new[$i][$key][$subKey] == $old[$i][$key][$subKey]) then
-                                      $old[$i][$key][$subKey]
+                                    if ($new[.][$key][$subKey] == $old[.][$key][$subKey]) then
+                                      $old[.][$key][$subKey]
                                     else
-                                      $new[$i][$key][$subKey]
+                                      $new[.][$key][$subKey]
                                     end
                                   )
                                 )
                               else
-                                $new[$i][$key]
+                                $new[.][$key]
                               end
                             )
                           )
                         end
                       else
-                        # If the block does not exist in the old JSON, include it fully
-                        $new[$i]
+                        # Include the new block if it doesn’t exist in the old JSON
+                        $new[.]
                       end
                     ]
                   ')
