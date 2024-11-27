@@ -83,23 +83,20 @@ jobs:
               # Initialize an array to store the differences
               $diffResults = @()
 
-              # Find all unique ApplicationNames from both JSON files
-              $allNames = ($json1.ApplicationName + $json2.ApplicationName) | Sort-Object -Unique
+              # Ensure the files have the same number of entries
+              if ($json1.Count -ne $json2.Count) {
+                  Write-Host "Error: Input files do not have the same number of entries."
+                  exit 1
+              }
 
-              foreach ($name in $allNames) {
-                  $item1 = $json1 | Where-Object { $_.ApplicationName -eq $name }
-                  $item2 = $json2 | Where-Object { $_.ApplicationName -eq $name }
+              # Compare objects
+              foreach ($item2 in $json2) {
+                  $item1 = $json1 | Where-Object { $_.ApplicationName -eq $item2.ApplicationName }
 
                   if (!$item1) {
                       # New block that doesn't exist in old JSON
-                      Write-Host "New block detected: $name"
+                      Write-Host "New block detected: $($item2.ApplicationName)"
                       $diffResults += $item2
-                      continue
-                  }
-
-                  if (!$item2) {
-                      # Block removed in new JSON (optional: handle if necessary)
-                      Write-Host "Block removed: $name"
                       continue
                   }
 
@@ -119,6 +116,7 @@ jobs:
                   # Compare RoleGroupOwners
                   $newRoleGroupOwners = @($item2.RoleGroupOwners | Where-Object { $_ -notin $item1.RoleGroupOwners })
                   if ($newRoleGroupOwners.Count -gt 0) {
+                      Write-Host "Detected changes in RoleGroupOwners for $($item1.ApplicationName): $($newRoleGroupOwners -join ', ')"
                       $diffEntry.RoleGroupOwners = $newRoleGroupOwners
                       $changeCount++
                   }
@@ -126,16 +124,19 @@ jobs:
                   # Compare TechnicalGroups
                   $newTechnicalGroups = @($item2.TechnicalGroups | Where-Object { $_ -notin $item1.TechnicalGroups })
                   if ($newTechnicalGroups.Count -gt 0) {
+                      Write-Host "Detected changes in TechnicalGroups for $($item1.ApplicationName): $($newTechnicalGroups -join ', ')"
                       $diffEntry.TechnicalGroups = $newTechnicalGroups
                       $changeCount++
                   }
 
                   # Compare other fields
                   if ($item1.NestRoleGroupInTechnicalGroups -ne $item2.NestRoleGroupInTechnicalGroups) {
+                      Write-Host "Detected change in NestRoleGroupInTechnicalGroups for $($item1.ApplicationName)"
                       $diffEntry.NestRoleGroupInTechnicalGroups = $item2.NestRoleGroupInTechnicalGroups
                       $changeCount++
                   }
                   if ($item1.AccessReviewEnabled -ne $item2.AccessReviewEnabled) {
+                      Write-Host "Detected change in AccessReviewEnabled for $($item1.ApplicationName)"
                       $diffEntry.AccessReviewEnabled = $item2.AccessReviewEnabled
                       $changeCount++
                   }
@@ -152,8 +153,8 @@ jobs:
               if ($diffResults.Count -eq 0) {
                   Write-Host "No differences detected between $oldFile and $newFile."
               } else {
-                  $diffResults | ConvertTo-Json -Depth 10 | Set-Content -Path $outputFile
-                  Write-Host "Diff saved to $outputFile"
+                  Write-Host "Differences Detected in $(Split-Path -Leaf $file):"
+                  $diffResults | ConvertTo-Json -Depth 10 | Tee-Object -FilePath $outputFile | Write-Host
               }
           }
 
