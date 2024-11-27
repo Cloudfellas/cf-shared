@@ -16,7 +16,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch entire history to allow proper comparisons
+          fetch-depth: 0  # Fetch full history for proper diffing
 
       # Step 2: Prepare JSON Files (_old.json and _new.json)
       - name: Prepare JSON Files
@@ -56,6 +56,7 @@ jobs:
       - name: Process JSON Diff with PowerShell
         shell: pwsh
         run: |
+          # List all files with _old.json and _new.json suffixes
           $files = Get-ChildItem -Path "." -Filter "*_old.json" | ForEach-Object {
               $_.FullName -replace "_old.json", ""
           }
@@ -99,34 +100,42 @@ jobs:
                   $diffEntry = [PSCustomObject]@{
                       ApplicationName               = $item1.ApplicationName
                       RoleGroupName                 = $item1.RoleGroupName
-                      RoleGroupOwners               = $item1.RoleGroupOwners
-                      TechnicalGroups               = $item1.TechnicalGroups
+                      RoleGroupOwners               = @()
+                      TechnicalGroups               = @()
                       NestRoleGroupInTechnicalGroups = $item1.NestRoleGroupInTechnicalGroups
                       AccessReviewEnabled           = $item1.AccessReviewEnabled
                   }
 
                   # Compare RoleGroupOwners
+                  Write-Host "Comparing RoleGroupOwners for $($item1.ApplicationName)"
+                  Write-Host "Old: $($item1.RoleGroupOwners -join ', ')"
+                  Write-Host "New: $($item2.RoleGroupOwners -join ', ')"
                   $newRoleGroupOwners = Compare-Object -ReferenceObject $item1.RoleGroupOwners -DifferenceObject $item2.RoleGroupOwners -PassThru
                   if ($newRoleGroupOwners.Count -gt 0) {
-                      Write-Host "Detected changes in RoleGroupOwners for $($item1.ApplicationName): $($newRoleGroupOwners -join ', ')"
+                      Write-Host "Detected changes in RoleGroupOwners: $($newRoleGroupOwners -join ', ')"
                       $diffEntry.RoleGroupOwners = $newRoleGroupOwners
                       $changeCount++
                   }
 
                   # Compare TechnicalGroups
+                  Write-Host "Comparing TechnicalGroups for $($item1.ApplicationName)"
+                  Write-Host "Old: $($item1.TechnicalGroups -join ', ')"
+                  Write-Host "New: $($item2.TechnicalGroups -join ', ')"
                   $newTechnicalGroups = Compare-Object -ReferenceObject $item1.TechnicalGroups -DifferenceObject $item2.TechnicalGroups -PassThru
                   if ($newTechnicalGroups.Count -gt 0) {
-                      Write-Host "Detected changes in TechnicalGroups for $($item1.ApplicationName): $($newTechnicalGroups -join ', ')"
+                      Write-Host "Detected changes in TechnicalGroups: $($newTechnicalGroups -join ', ')"
                       $diffEntry.TechnicalGroups = $newTechnicalGroups
                       $changeCount++
                   }
 
                   # Compare other fields
                   if ($item1.NestRoleGroupInTechnicalGroups -ne $item2.NestRoleGroupInTechnicalGroups) {
+                      Write-Host "Detected change in NestRoleGroupInTechnicalGroups"
                       $diffEntry.NestRoleGroupInTechnicalGroups = $item2.NestRoleGroupInTechnicalGroups
                       $changeCount++
                   }
                   if ($item1.AccessReviewEnabled -ne $item2.AccessReviewEnabled) {
+                      Write-Host "Detected change in AccessReviewEnabled"
                       $diffEntry.AccessReviewEnabled = $item2.AccessReviewEnabled
                       $changeCount++
                   }
