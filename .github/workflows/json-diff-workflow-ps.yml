@@ -9,19 +9,20 @@ on:
 
 jobs:
   process-changes:
-    runs-on: windows-latest  # Required for PowerShell
+    runs-on: windows-latest  # Use Windows for PowerShell compatibility
 
     steps:
       # Step 1: Checkout Repository
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch entire history to allow proper comparisons
+          fetch-depth: 0  # Fetch entire history for proper diffing
 
       # Step 2: Prepare JSON Files (_old.json and _new.json)
       - name: Prepare JSON Files
         shell: bash
         run: |
+          mkdir -p ./json-files
           echo "Input file paths: ${{ inputs.file_paths }}"
           file_paths=$(echo '${{ inputs.file_paths }}' | jq -r '.[]')
           for file in $file_paths; do
@@ -32,31 +33,32 @@ jobs:
 
             if [ "$is_added" -eq 1 ]; then
               echo "File $file is newly added."
-              echo "{}" > "${file}_old.json"
-              git show HEAD:"$file" > "${file}_new.json"
+              echo "{}" > "./json-files/$(basename "${file}")_old.json"
+              git show HEAD:"$file" > "./json-files/$(basename "${file}")_new.json"
             else
               last_commit_hash=$(git log -2 --pretty=format:"%H" -- "$file" | tail -n 1)
               echo "Last commit hash for $file: $last_commit_hash"
 
               if [ -z "$last_commit_hash" ]; then
-                echo "{}" > "${file}_old.json"
+                echo "{}" > "./json-files/$(basename "${file}")_old.json"
               else
-                git show ${last_commit_hash}:"$file" > "${file}_old.json"
+                git show ${last_commit_hash}:"$file" > "./json-files/$(basename "${file}")_old.json"
               fi
-              git show HEAD:"$file" > "${file}_new.json"
+              git show HEAD:"$file" > "./json-files/$(basename "${file}")_new.json"
             fi
 
             echo "Content of old JSON:"
-            cat "${file}_old.json"
+            cat "./json-files/$(basename "${file}")_old.json"
             echo "Content of new JSON:"
-            cat "${file}_new.json"
+            cat "./json-files/$(basename "${file}")_new.json"
           done
 
       # Step 3: Process JSON Diff with PowerShell
       - name: Process JSON Diff with PowerShell
         shell: pwsh
         run: |
-          $files = Get-ChildItem -Path "." -Filter "*_old.json" | ForEach-Object {
+          $jsonPath = "./json-files"
+          $files = Get-ChildItem -Path $jsonPath -Filter "*_old.json" | ForEach-Object {
               $_.FullName -replace "_old.json", ""
           }
 
@@ -151,4 +153,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: json-diff-files
-          path: '**/*_diff.json'
+          path: './json-files/**/*_diff.json'
