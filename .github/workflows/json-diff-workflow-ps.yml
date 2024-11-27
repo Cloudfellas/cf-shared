@@ -1,4 +1,4 @@
-name: Process File Changes with PowerShell Diff
+name: Process File Changes with PowerShell
 
 on:
   workflow_call:
@@ -9,14 +9,18 @@ on:
 
 jobs:
   process-changes:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest  # Use Windows for PowerShell compatibility
+
     steps:
+      # Step 1: Checkout Repository
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch all history for git diff
+          fetch-depth: 0  # Fetch entire history for proper diffing
 
-      - name: Prepare JSON Files for Diff
+      # Step 2: Prepare JSON Files (_old.json and _new.json)
+      - name: Prepare JSON Files
+        shell: bash
         run: |
           mkdir -p ./json-files
           echo "Input file paths: ${{ inputs.file_paths }}"
@@ -24,27 +28,33 @@ jobs:
           for file in $file_paths; do
             echo "Processing file: $file"
 
+            # Check if the file is newly added
             is_added=$(git diff-tree --no-commit-id --name-only --diff-filter=A -r HEAD -- "$file" | wc -l)
+
             if [ "$is_added" -eq 1 ]; then
-              echo "{}" > "./json-files/$(basename "$file")_old.json"
-              git show HEAD:"$file" > "./json-files/$(basename "$file")_new.json"
+              echo "File $file is newly added."
+              echo "{}" > "./json-files/$(basename "${file}")_old.json"
+              git show HEAD:"$file" > "./json-files/$(basename "${file}")_new.json"
             else
               last_commit_hash=$(git log -2 --pretty=format:"%H" -- "$file" | tail -n 1)
+              echo "Last commit hash for $file: $last_commit_hash"
+
               if [ -z "$last_commit_hash" ]; then
-                echo "{}" > "./json-files/$(basename "$file")_old.json"
+                echo "{}" > "./json-files/$(basename "${file}")_old.json"
               else
-                git show ${last_commit_hash}:"$file" > "./json-files/$(basename "$file")_old.json"
+                git show ${last_commit_hash}:"$file" > "./json-files/$(basename "${file}")_old.json"
               fi
-              git show HEAD:"$file" > "./json-files/$(basename "$file")_new.json"
+              git show HEAD:"$file" > "./json-files/$(basename "${file}")_new.json"
             fi
 
             echo "Content of old JSON:"
-            cat "./json-files/$(basename "$file")_old.json"
+            cat "./json-files/$(basename "${file}")_old.json"
             echo "Content of new JSON:"
-            cat "./json-files/$(basename "$file")_new.json"
+            cat "./json-files/$(basename "${file}")_new.json"
           done
 
-      - name: Diff JSON Files with PowerShell
+      # Step 3: Process JSON Diff with PowerShell
+      - name: Process JSON Diff with PowerShell
         shell: pwsh
         run: |
           $jsonPath = "./json-files"
@@ -57,18 +67,21 @@ jobs:
               $newFile = "${file}_new.json"
               $outputFile = "${file}_diff.json"
 
+              if (!(Test-Path $oldFile)) {
+                  Write-Error "Missing old JSON file: $oldFile"
+                  exit 1
+              }
+              if (!(Test-Path $newFile)) {
+                  Write-Error "Missing new JSON file: $newFile"
+                  exit 1
+              }
+
               # Load JSON files
               $json1 = Get-Content -Path $oldFile -Raw | ConvertFrom-Json
               $json2 = Get-Content -Path $newFile -Raw | ConvertFrom-Json
 
               # Initialize an array to store the differences
               $diffResults = @()
-
-              # Ensure the files have the same number of entries
-              if ($json1.Count -ne $json2.Count) {
-                  Write-Host "Error: Input files do not have the same number of entries."
-                  exit 1
-              }
 
               # Compare objects
               for ($i = 0; $i -lt $json1.Count; $i++) {
@@ -120,13 +133,18 @@ jobs:
                   }
               }
 
-              # Save differences to file
-              $diffResults | ConvertTo-Json -Depth 10 | Set-Content -Path $outputFile
-              Write-Host "Diff saved to $outputFile"
+              # Convert to JSON and save to file
+              if ($diffResults.Count -eq 0) {
+                  Write-Host "No differences detected between $oldFile and $newFile."
+              } else {
+                  $diffResults | ConvertTo-Json -Depth 10 | Set-Content -Path $outputFile
+                  Write-Host "Diff saved to $outputFile"
+              }
           }
 
+      # Step 4: Upload JSON Diff Files
       - name: Upload JSON Diff Files
         uses: actions/upload-artifact@v4
         with:
           name: newjson-files
-          path: ./json-files/*_diff.json
+          path: './json-files/**/*_diff.json'
