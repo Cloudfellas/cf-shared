@@ -9,16 +9,16 @@ on:
 
 jobs:
   process-changes:
-    runs-on: windows-latest  # Required for PowerShell
+    runs-on: windows-latest  # Windows required for PowerShell
 
     steps:
-      # Checkout the repository
+      # Step 1: Checkout Repository
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch all history
+          fetch-depth: 0  # Fetch entire history to allow proper comparisons
 
-      # Prepare JSON Files
+      # Step 2: Prepare JSON Files (_old.json and _new.json)
       - name: Prepare JSON Files
         shell: bash
         run: |
@@ -39,7 +39,6 @@ jobs:
               echo "Last commit hash for $file: $last_commit_hash"
 
               if [ -z "$last_commit_hash" ]; then
-                echo "File not found in any previous commits, creating empty json."
                 echo "{}" > "${file}_old.json"
               else
                 git show ${last_commit_hash}:"$file" > "${file}_old.json"
@@ -53,7 +52,7 @@ jobs:
             cat "${file}_new.json"
           done
 
-      # Process JSON Diff with PowerShell
+      # Step 3: Process JSON Diff with PowerShell
       - name: Process JSON Diff with PowerShell
         shell: pwsh
         run: |
@@ -107,8 +106,6 @@ jobs:
                   }
 
                   # Compare RoleGroupOwners
-                  Write-Host "Old RoleGroupOwners for $($item1.ApplicationName): $($item1.RoleGroupOwners -join ', ')"
-                  Write-Host "New RoleGroupOwners for $($item2.ApplicationName): $($item2.RoleGroupOwners -join ', ')"
                   $newRoleGroupOwners = Compare-Object -ReferenceObject $item1.RoleGroupOwners -DifferenceObject $item2.RoleGroupOwners -PassThru
                   if ($newRoleGroupOwners.Count -gt 0) {
                       Write-Host "Detected changes in RoleGroupOwners for $($item1.ApplicationName): $($newRoleGroupOwners -join ', ')"
@@ -117,8 +114,6 @@ jobs:
                   }
 
                   # Compare TechnicalGroups
-                  Write-Host "Old TechnicalGroups for $($item1.ApplicationName): $($item1.TechnicalGroups -join ', ')"
-                  Write-Host "New TechnicalGroups for $($item2.ApplicationName): $($item2.TechnicalGroups -join ', ')"
                   $newTechnicalGroups = Compare-Object -ReferenceObject $item1.TechnicalGroups -DifferenceObject $item2.TechnicalGroups -PassThru
                   if ($newTechnicalGroups.Count -gt 0) {
                       Write-Host "Detected changes in TechnicalGroups for $($item1.ApplicationName): $($newTechnicalGroups -join ', ')"
@@ -150,14 +145,14 @@ jobs:
 
               # Convert to JSON and save to file
               if ($diffResults.Count -eq 0) {
-                  Write-Host "No differences detected for $oldFile and $newFile."
+                  Write-Host "No differences detected between $oldFile and $newFile."
               } else {
                   $diffResults | ConvertTo-Json -Depth 10 | Set-Content -Path $outputFile
                   Write-Host "Diff saved to $outputFile"
               }
           }
 
-      # Upload JSON Diff Files
+      # Step 4: Upload JSON Diff Files
       - name: Upload JSON Diff Files
         uses: actions/upload-artifact@v4
         with:
