@@ -83,17 +83,17 @@ jobs:
               # Initialize an array to store the differences
               $diffResults = @()
 
-              # Ensure the files have the same number of entries
-              if ($json1.Count -ne $json2.Count) {
-                  Write-Host "Error: Input files do not have the same number of entries."
-                  exit 1
+              # Create a lookup for old JSON by ApplicationName
+              $oldLookup = @{}
+              foreach ($item in $json1) {
+                  $oldLookup[$item.ApplicationName] = $item
               }
 
-              # Compare objects
+              # Iterate through new JSON
               foreach ($item2 in $json2) {
-                  $item1 = $json1 | Where-Object { $_.ApplicationName -eq $item2.ApplicationName }
+                  $item1 = $oldLookup[$item2.ApplicationName]
 
-                  if (!$item1) {
+                  if (-not $item1) {
                       # New block that doesn't exist in old JSON
                       Write-Host "New block detected: $($item2.ApplicationName)"
                       $diffResults += $item2
@@ -146,6 +146,14 @@ jobs:
                       $diffResults += $item2
                   } elseif ($changeCount -eq 1) {
                       $diffResults += $diffEntry
+                  }
+              }
+
+              # Check for removed blocks
+              foreach ($item1 in $json1) {
+                  if (-not ($json2 | Where-Object { $_.ApplicationName -eq $item1.ApplicationName })) {
+                      Write-Host "Removed block detected: $($item1.ApplicationName)"
+                      $diffResults += $item1 | Select-Object -Property ApplicationName, RoleGroupName
                   }
               }
 
