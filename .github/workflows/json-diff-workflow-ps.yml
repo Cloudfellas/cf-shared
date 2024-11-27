@@ -53,11 +53,10 @@ jobs:
             cat "${file}_new.json"
           done
 
-      # Run PowerShell to Process JSON Diff
+      # Process JSON Diff with PowerShell
       - name: Process JSON Diff with PowerShell
         shell: pwsh
         run: |
-          # List all files with _old.json and _new.json suffixes
           $files = Get-ChildItem -Path "." -Filter "*_old.json" | ForEach-Object {
               $_.FullName -replace "_old.json", ""
           }
@@ -108,15 +107,21 @@ jobs:
                   }
 
                   # Compare RoleGroupOwners
-                  $newRoleGroupOwners = @($item2.RoleGroupOwners | Where-Object { $_ -notin $item1.RoleGroupOwners })
+                  Write-Host "Old RoleGroupOwners for $($item1.ApplicationName): $($item1.RoleGroupOwners -join ', ')"
+                  Write-Host "New RoleGroupOwners for $($item2.ApplicationName): $($item2.RoleGroupOwners -join ', ')"
+                  $newRoleGroupOwners = Compare-Object -ReferenceObject $item1.RoleGroupOwners -DifferenceObject $item2.RoleGroupOwners -PassThru
                   if ($newRoleGroupOwners.Count -gt 0) {
+                      Write-Host "Detected changes in RoleGroupOwners for $($item1.ApplicationName): $($newRoleGroupOwners -join ', ')"
                       $diffEntry.RoleGroupOwners = $newRoleGroupOwners
                       $changeCount++
                   }
 
                   # Compare TechnicalGroups
-                  $newTechnicalGroups = @($item2.TechnicalGroups | Where-Object { $_ -notin $item1.TechnicalGroups })
+                  Write-Host "Old TechnicalGroups for $($item1.ApplicationName): $($item1.TechnicalGroups -join ', ')"
+                  Write-Host "New TechnicalGroups for $($item2.ApplicationName): $($item2.TechnicalGroups -join ', ')"
+                  $newTechnicalGroups = Compare-Object -ReferenceObject $item1.TechnicalGroups -DifferenceObject $item2.TechnicalGroups -PassThru
                   if ($newTechnicalGroups.Count -gt 0) {
+                      Write-Host "Detected changes in TechnicalGroups for $($item1.ApplicationName): $($newTechnicalGroups -join ', ')"
                       $diffEntry.TechnicalGroups = $newTechnicalGroups
                       $changeCount++
                   }
@@ -133,15 +138,23 @@ jobs:
 
                   # Decide what to include in the output
                   if ($changeCount -gt 1) {
+                      Write-Host "Multiple changes detected for $($item2.ApplicationName). Adding full block."
                       $diffResults += $item2
                   } elseif ($changeCount -eq 1) {
+                      Write-Host "Single change detected for $($item2.ApplicationName). Adding diff entry."
                       $diffResults += $diffEntry
+                  } else {
+                      Write-Host "No changes detected for $($item2.ApplicationName)."
                   }
               }
 
               # Convert to JSON and save to file
-              $diffResults | ConvertTo-Json -Depth 10 | Set-Content -Path $outputFile
-              Write-Host "Diff saved to $outputFile"
+              if ($diffResults.Count -eq 0) {
+                  Write-Host "No differences detected for $oldFile and $newFile."
+              } else {
+                  $diffResults | ConvertTo-Json -Depth 10 | Set-Content -Path $outputFile
+                  Write-Host "Diff saved to $outputFile"
+              }
           }
 
       # Upload JSON Diff Files
