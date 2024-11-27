@@ -9,7 +9,7 @@ on:
 
 jobs:
   process-changes:
-    runs-on: windows-latest  # Required for PowerShell compatibility
+    runs-on: windows-latest  # Required for PowerShell
 
     steps:
       # Checkout the repository
@@ -35,11 +35,9 @@ jobs:
               echo "{}" > "${file}_old.json"
               git show HEAD:"$file" > "${file}_new.json"
             else
-              # Fetch the last commit hash where the file was changed
               last_commit_hash=$(git log -2 --pretty=format:"%H" -- "$file" | tail -n 1)
               echo "Last commit hash for $file: $last_commit_hash"
 
-              # Handle case where no previous version is found
               if [ -z "$last_commit_hash" ]; then
                 echo "File not found in any previous commits, creating empty json."
                 echo "{}" > "${file}_old.json"
@@ -59,9 +57,12 @@ jobs:
       - name: Process JSON Diff with PowerShell
         shell: pwsh
         run: |
-          $filePaths = Get-ChildItem -Path "." -Filter "*_old.json" | ForEach-Object { $_.FullName -replace "_old.json", "" }
+          # List all files with _old.json and _new.json suffixes
+          $files = Get-ChildItem -Path "." -Filter "*_old.json" | ForEach-Object {
+              $_.FullName -replace "_old.json", ""
+          }
 
-          foreach ($file in $filePaths) {
+          foreach ($file in $files) {
               $oldFile = "${file}_old.json"
               $newFile = "${file}_new.json"
               $outputFile = "${file}_diff.json"
@@ -82,6 +83,12 @@ jobs:
               # Initialize an array to store the differences
               $diffResults = @()
 
+              # Ensure the files have the same number of entries
+              if ($json1.Count -ne $json2.Count) {
+                  Write-Host "Error: Input files do not have the same number of entries."
+                  exit 1
+              }
+
               # Compare objects
               for ($i = 0; $i -lt $json1.Count; $i++) {
                   $item1 = $json1[$i]
@@ -100,14 +107,14 @@ jobs:
                       AccessReviewEnabled           = $item1.AccessReviewEnabled
                   }
 
-                  # Compare RoleGroupOwners (keep as array)
+                  # Compare RoleGroupOwners
                   $newRoleGroupOwners = @($item2.RoleGroupOwners | Where-Object { $_ -notin $item1.RoleGroupOwners })
                   if ($newRoleGroupOwners.Count -gt 0) {
                       $diffEntry.RoleGroupOwners = $newRoleGroupOwners
                       $changeCount++
                   }
 
-                  # Compare TechnicalGroups (keep as array)
+                  # Compare TechnicalGroups
                   $newTechnicalGroups = @($item2.TechnicalGroups | Where-Object { $_ -notin $item1.TechnicalGroups })
                   if ($newTechnicalGroups.Count -gt 0) {
                       $diffEntry.TechnicalGroups = $newTechnicalGroups
@@ -132,19 +139,12 @@ jobs:
                   }
               }
 
-              # Debug: Check differences
-              if ($diffResults.Count -eq 0) {
-                  Write-Host "No differences detected for $oldFile and $newFile."
-              } else {
-                  $diffResults | ConvertTo-Json -Depth 10 | Set-Content -Path $outputFile
-                  Write-Host "Diff saved to $outputFile"
-              }
+              # Convert to JSON and save to file
+              $diffResults | ConvertTo-Json -Depth 10 | Set-Content -Path $outputFile
+              Write-Host "Diff saved to $outputFile"
           }
 
-      - name: List Generated Files
-        run: dir . /s
-        shell: pwsh
-
+      # Upload JSON Diff Files
       - name: Upload JSON Diff Files
         uses: actions/upload-artifact@v4
         with:
