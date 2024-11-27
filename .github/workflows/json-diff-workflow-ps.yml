@@ -152,5 +152,5 @@ jobs:
       - name: Upload JSON Diff Files
         uses: actions/upload-artifact@v4
         with:
-          name: json-diff-files
+          name: newjson-files
           path: './json-files/**/*_diff.json'
