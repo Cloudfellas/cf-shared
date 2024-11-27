@@ -83,10 +83,25 @@ jobs:
               # Initialize an array to store the differences
               $diffResults = @()
 
-              # Compare objects
-              for ($i = 0; $i -lt $json1.Count; $i++) {
-                  $item1 = $json1[$i]
-                  $item2 = $json2[$i]
+              # Find all unique ApplicationNames from both JSON files
+              $allNames = ($json1.ApplicationName + $json2.ApplicationName) | Sort-Object -Unique
+
+              foreach ($name in $allNames) {
+                  $item1 = $json1 | Where-Object { $_.ApplicationName -eq $name }
+                  $item2 = $json2 | Where-Object { $_.ApplicationName -eq $name }
+
+                  if (!$item1) {
+                      # New block that doesn't exist in old JSON
+                      Write-Host "New block detected: $name"
+                      $diffResults += $item2
+                      continue
+                  }
+
+                  if (!$item2) {
+                      # Block removed in new JSON (optional: handle if necessary)
+                      Write-Host "Block removed: $name"
+                      continue
+                  }
 
                   # Initialize a counter for changes
                   $changeCount = 0
