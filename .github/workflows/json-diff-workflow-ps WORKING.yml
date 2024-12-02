@@ -1,0 +1,174 @@
+name: Process File Changes with PowerShell
+
+on:
+  workflow_call:
+    inputs:
+      file_paths:
+        required: true
+        type: string
+
+jobs:
+  process-changes:
+    runs-on: windows-latest  # Use Windows for PowerShell compatibility
+
+    steps:
+      # Step 1: Checkout Repository
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch entire history for proper diffing
+
+      # Step 2: Prepare JSON Files (_old.json and _new.json)
+      - name: Prepare JSON Files
+        shell: bash
+        run: |
+          mkdir -p ./json-files
+          echo "Input file paths: ${{ inputs.file_paths }}"
+          file_paths=$(echo '${{ inputs.file_paths }}' | jq -r '.[]')
+          for file in $file_paths; do
+            echo "Processing file: $file"
+
+            # Check if the file is newly added
+            is_added=$(git diff-tree --no-commit-id --name-only --diff-filter=A -r HEAD -- "$file" | wc -l)
+
+            if [ "$is_added" -eq 1 ]; then
+              echo "File $file is newly added."
+              echo "{}" > "./json-files/$(basename "${file}")_old.json"
+              git show HEAD:"$file" > "./json-files/$(basename "${file}")_new.json"
+            else
+              last_commit_hash=$(git log -2 --pretty=format:"%H" -- "$file" | tail -n 1)
+              echo "Last commit hash for $file: $last_commit_hash"
+
+              if [ -z "$last_commit_hash" ]; then
+                echo "{}" > "./json-files/$(basename "${file}")_old.json"
+              else
+                git show ${last_commit_hash}:"$file" > "./json-files/$(basename "${file}")_old.json"
+              fi
+              git show HEAD:"$file" > "./json-files/$(basename "${file}")_new.json"
+            fi
+
+            echo "Content of old JSON:"
+            cat "./json-files/$(basename "${file}")_old.json"
+            echo "Content of new JSON:"
+            cat "./json-files/$(basename "${file}")_new.json"
+          done
+
+      # Step 3: Process JSON Diff with PowerShell
+      - name: Process JSON Diff with PowerShell
+        shell: pwsh
+        run: |
+          $jsonPath = "./json-files"
+          $files = Get-ChildItem -Path $jsonPath -Filter "*_old.json" | ForEach-Object {
+              $_.FullName -replace "_old.json", ""
+          }
+
+          foreach ($file in $files) {
+              $oldFile = "${file}_old.json"
+              $newFile = "${file}_new.json"
+              $outputFile = "${file}_diff.json"
+
+              if (!(Test-Path $oldFile)) {
+                  Write-Error "Missing old JSON file: $oldFile"
+                  exit 1
+              }
+              if (!(Test-Path $newFile)) {
+                  Write-Error "Missing new JSON file: $newFile"
+                  exit 1
+              }
+
+              # Load JSON files
+              $json1 = Get-Content -Path $oldFile -Raw | ConvertFrom-Json
+              $json2 = Get-Content -Path $newFile -Raw | ConvertFrom-Json
+
+              # Initialize an array to store the differences
+              $diffResults = @()
+
+              # Create a lookup for old JSON by ApplicationName
+              $oldLookup = @{}
+              foreach ($item in $json1) {
+                  $oldLookup[$item.ApplicationName] = $item
+              }
+
+              # Iterate through new JSON
+              foreach ($item2 in $json2) {
+                  $item1 = $oldLookup[$item2.ApplicationName]
+
+                  if (-not $item1) {
+                      # New block that doesn't exist in old JSON
+                      Write-Host "New block detected: $($item2.ApplicationName)"
+                      $diffResults += $item2
+                      continue
+                  }
+
+                  # Initialize a counter for changes
+                  $changeCount = 0
+
+                  # Prepare a diff entry
+                  $diffEntry = [PSCustomObject]@{
+                      ApplicationName               = $item1.ApplicationName
+                      RoleGroupName                 = $item1.RoleGroupName
+                      RoleGroupOwners               = $item1.RoleGroupOwners
+                      TechnicalGroups               = $item1.TechnicalGroups
+                      NestRoleGroupInTechnicalGroups = $item1.NestRoleGroupInTechnicalGroups
+                      AccessReviewEnabled           = $item1.AccessReviewEnabled
+                  }
+
+                  # Compare RoleGroupOwners
+                  $newRoleGroupOwners = @($item2.RoleGroupOwners | Where-Object { $_ -notin $item1.RoleGroupOwners })
+                  if ($newRoleGroupOwners.Count -gt 0) {
+                      Write-Host "Detected changes in RoleGroupOwners for $($item1.ApplicationName): $($newRoleGroupOwners -join ', ')"
+                      $diffEntry.RoleGroupOwners = $newRoleGroupOwners
+                      $changeCount++
+                  }
+
+                  # Compare TechnicalGroups
+                  $newTechnicalGroups = @($item2.TechnicalGroups | Where-Object { $_ -notin $item1.TechnicalGroups })
+                  if ($newTechnicalGroups.Count -gt 0) {
+                      Write-Host "Detected changes in TechnicalGroups for $($item1.ApplicationName): $($newTechnicalGroups -join ', ')"
+                      $diffEntry.TechnicalGroups = $newTechnicalGroups
+                      $changeCount++
+                  }
+
+                  # Compare other fields
+                  if ($item1.NestRoleGroupInTechnicalGroups -ne $item2.NestRoleGroupInTechnicalGroups) {
+                      Write-Host "Detected change in NestRoleGroupInTechnicalGroups for $($item1.ApplicationName)"
+                      $diffEntry.NestRoleGroupInTechnicalGroups = $item2.NestRoleGroupInTechnicalGroups
+                      $changeCount++
+                  }
+                  if ($item1.AccessReviewEnabled -ne $item2.AccessReviewEnabled) {
+                      Write-Host "Detected change in AccessReviewEnabled for $($item1.ApplicationName)"
+                      $diffEntry.AccessReviewEnabled = $item2.AccessReviewEnabled
+                      $changeCount++
+                  }
+
+                  # Decide what to include in the output
+                  if ($changeCount -gt 1) {
+                      $diffResults += $item2
+                  } elseif ($changeCount -eq 1) {
+                      $diffResults += $diffEntry
+                  }
+              }
+
+              # Check for removed blocks
+              foreach ($item1 in $json1) {
+                  if (-not ($json2 | Where-Object { $_.ApplicationName -eq $item1.ApplicationName })) {
+                      Write-Host "Removed block detected: $($item1.ApplicationName)"
+                      $diffResults += $item1 | Select-Object -Property ApplicationName, RoleGroupName
+                  }
+              }
+
+              # Convert to JSON and save to file
+              if ($diffResults.Count -eq 0) {
+                  Write-Host "No differences detected between $oldFile and $newFile."
+              } else {
+                  Write-Host "Differences Detected in $(Split-Path -Leaf $file):"
+                  $diffResults | ConvertTo-Json -Depth 10 | Tee-Object -FilePath $outputFile | Write-Host
+              }
+          }
+
+      # Step 4: Upload JSON Diff Files
+      - name: Upload JSON Diff Files
+        uses: actions/upload-artifact@v4
+        with:
+          name: newjson-files
+          path: './json-files/**/*_diff.json'
