@@ -1,0 +1,116 @@
+---
+name: Process File Changes
+
+on:
+  workflow_call:
+    inputs:
+      file_paths:
+        required: true
+        type: string
+
+jobs:
+  process-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      artifacts: ${{ steps.file_changes.outputs.output_file }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history
+
+      - name: Downgrade to jq 1.6
+        run: |
+          # Remove the existing jq version
+          sudo rm -f /usr/bin/jq
+           # Download jq 1.6 from the official release link
+          wget -O jq https://github.com/jqlang/jq/releases/download/jq-1.6/jq-linux64
+           # Make the downloaded binary executable
+          chmod +x jq
+           # Move it to a directory in the PATH
+          sudo mv jq /usr/local/bin
+           # Verify the version
+          jq --version
+          echo "jq 1.6 installed successfully."
+
+      - name: Process Files
+        run: |
+          echo "Input file paths: ${{ inputs.file_paths }}"
+          file_paths=$(echo '${{ inputs.file_paths }}' | jq -r '.[]')
+          for file in $file_paths; do
+            echo "Processing file: $file"
+
+            # Check if the file is newly added
+            is_added=$(git diff-tree --no-commit-id --name-only --diff-filter=A -r HEAD -- "$file" | wc -l)
+
+            if [ "$is_added" -eq 1 ]; then
+              echo "File $file is newly added."
+              echo "{}" > "${file}_old.json"
+              git show HEAD:"$file" > "${file}_new.json"
+            else
+              # Fetch the last commit hash where the file was changed, excluding the very last commit
+              last_commit_hash=$(git log -2 --pretty=format:"%H" -- "$file" | tail -n 1)
+              echo "Last commit hash for $file: $last_commit_hash"
+
+              # Handle case where no previous version is found
+              if [ -z "$last_commit_hash" ]; then
+                echo "File not found in any previous commits, creating empty json."
+                echo "{}" > "${file}_old.json"
+              else
+                git show ${last_commit_hash}:$file > "${file}_old.json"
+              fi
+              git show HEAD:"$file" > "${file}_new.json"
+            fi
+
+            echo "Content of old JSON:"
+            cat "${file}_old.json"
+            echo "Content of new JSON:"
+            cat "${file}_new.json"
+          done
+
+      - name: Detect Changes with jq
+        id: file_changes
+        run: |
+          file_paths=$(echo '${{ inputs.file_paths }}' | jq -r '.[]')
+          for file in $file_paths; do
+            old_json="${file}_old.json"
+            new_json="${file}_new.json"
+
+            echo "Verifying contents of ${old_json}:"
+            cat "${old_json}"
+            echo "Verifying contents of ${new_json}:"
+            cat "${new_json}"
+
+            # Check if both JSON files exist and are not empty
+            if [ -s "${old_json}" ] && [ -s "${new_json}" ]; then
+                # Find additions or changes
+                diff_json=$(jq --argfile old "${old_json}" --argfile new "${new_json}" -n '
+                  if ($old | type) == "array" and ($new | type) == "array" then
+                    [$new[] | select(. as $item | $old | index($item) | not)] as $added |
+                    [$new[] | select(. as $item | $old | index($item) | . == false)] as $changed |
+                    $added + $changed
+                  else
+                    $new
+                  end
+                ')
+
+                # Ensure directory exists
+                output_file="newjson_${file}"
+                output_dir=$(dirname "${output_file}")
+                mkdir -p "${output_dir}"
+
+                echo "${diff_json}" > "${output_file}"
+
+                echo "Differences Detected in $file:"
+                cat "${output_file}"
+                echo "output_file=${output_file}" >> $GITHUB_OUTPUT
+            else
+                echo "One or both JSON files are empty or missing for ${file}"
+            fi
+          done
+
+      - name: Upload newjson files
+        uses: actions/upload-artifact@v4
+        with:
+          name: newjson-files
+          path: newjson_*/**/*.json
